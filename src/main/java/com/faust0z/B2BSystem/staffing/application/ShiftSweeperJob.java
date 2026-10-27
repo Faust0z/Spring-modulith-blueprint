@@ -1,5 +1,6 @@
 package com.faust0z.B2BSystem.staffing.application;
 
+import com.faust0z.B2BSystem.core.TenantContext;
 import com.faust0z.B2BSystem.staffing.infrastructure.ShiftRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -25,10 +26,15 @@ public class ShiftSweeperJob {
         Instant now = Instant.now();
         Instant threshold = now.minus(Duration.ofHours(18));
 
-        int affectedRows = shiftRepository.closeUnfinishedShifts(threshold, now);
+        TenantContext.setTenantId(TenantContext.SYSTEM_SCOPE);
+        try {
+            int affectedRows = shiftRepository.closeUnfinishedShifts(threshold, now);
 
-        if (affectedRows > 0) {
-            log.info("Unfinished staff shifts sweeper executed | closed_count={}", affectedRows);
+            if (affectedRows > 0) {
+                log.info("Unfinished staff shifts sweeper executed | closed_count={}", affectedRows);
+            }
+        } finally {
+            TenantContext.clear();
         }
     }
 }

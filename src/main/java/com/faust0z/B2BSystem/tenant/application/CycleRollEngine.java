@@ -1,6 +1,7 @@
 package com.faust0z.B2BSystem.tenant.application;
 
 import com.faust0z.B2BSystem.core.TenantContext;
+import com.faust0z.B2BSystem.core.TenantJobRunner;
 import com.faust0z.B2BSystem.contacts.ContactInternalApi;
 import com.faust0z.B2BSystem.tenant.domain.BillingCycleEntity;
 import com.faust0z.B2BSystem.tenant.domain.CycleStatus;
@@ -41,39 +42,35 @@ public class CycleRollEngine {
     public void recordNightlyPeaks() {
         Instant now = Instant.now();
         log.debug("Recording nightly peak members");
-        List<BillingCycleEntity> activeCycles = billingCycleRepository.findActivesNative(now);
 
-        for (BillingCycleEntity cycle : activeCycles) {
-            try {
-                TenantContext.setTenantId(cycle.getTenantId());
+        List<UUID> activeCycleIds = billingCycleRepository.findActiveIds(now);
 
-                transactionTemplate.executeWithoutResult(status -> {
-                    int currentMembersWithAccess = memberApi.countContactsWithAccess(now);
-                    if (currentMembersWithAccess > cycle.getPeakMembers()) {
-                        log.info("Peak members updated | tenantId={} | billingCycleId={} | previousPeakMembers={} | newPeakMembers={}",
-                                cycle.getTenantId(), cycle.getId(), cycle.getPeakMembers(), currentMembersWithAccess);
-                        cycle.setPeakMembers(currentMembersWithAccess);
-                        billingCycleRepository.save(cycle);
-                    }
-                });
-            } finally {
-                TenantContext.clear();
-            }
-        }
+        TenantJobRunner.forEach(activeCycleIds, cycleId -> {
+            transactionTemplate.executeWithoutResult(status -> {
+                BillingCycleEntity cycle = billingCycleRepository.findByIdForWrite(cycleId).orElseThrow();
+                int currentMembersWithAccess = memberApi.countContactsWithAccess(now);
+                if (currentMembersWithAccess > cycle.getPeakMembers()) {
+                    log.info("Peak members updated | tenantId={} | billingCycleId={} | previousPeakMembers={} | newPeakMembers={}",
+                            cycle.getTenantId(), cycle.getId(), cycle.getPeakMembers(), currentMembersWithAccess);
+                    cycle.setPeakMembers(currentMembersWithAccess);
+                    billingCycleRepository.save(cycle);
+                }
+            });
+        });
     }
 
     @Scheduled(cron = "0 5 0 * * *", zone = "America/Argentina/Buenos_Aires")
     public void executeNightlyRoll() {
-        List<UUID> expiredTenantIds = billingCycleRepository.findTenantIdsWithExpiredActive(Instant.now());
+        TenantContext.setTenantId(TenantContext.SYSTEM_SCOPE);
+        try {
+            List<UUID> expiredTenantIds = billingCycleRepository.findTenantIdsWithExpiredActive(Instant.now());
 
-        for (UUID tenantId : expiredTenantIds) {
-            try {
-                TenantContext.setTenantId(tenantId);
+            TenantJobRunner.forEach(expiredTenantIds, tenantId -> {
                 log.info("Rolling cycle | tenantId={}", tenantId);
                 rollSingleTenant(tenantId);
-            } finally {
-                TenantContext.clear();
-            }
+            });
+        } finally {
+            TenantContext.clear();
         }
     }
 

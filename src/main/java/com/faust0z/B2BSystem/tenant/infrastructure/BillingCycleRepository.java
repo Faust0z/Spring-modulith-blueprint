@@ -42,6 +42,10 @@ public interface BillingCycleRepository extends JpaRepository<BillingCycleEntity
             nativeQuery = true)
     List<UUID> findTenantIdsWithExpiredActive(@Param("now") Instant now);
 
+    @Query(value = "SELECT c.id FROM billing_cycles c WHERE c.status IN ('PAID', 'PENDING_PAYMENT') AND c.is_demo = false AND c.period_start <= :now AND c.period_end >= :now",
+            nativeQuery = true)
+    List<UUID> findActiveIds(@Param("now") Instant now);
+
     @Query(value = "SELECT * FROM billing_cycles c WHERE c.status IN ('PAID', 'PENDING_PAYMENT') AND c.is_demo = false AND c.period_start <= :now AND c.period_end >= :now",
             nativeQuery = true)
     List<BillingCycleEntity> findActivesNative(@Param("now") Instant now);

@@ -76,9 +76,10 @@ class TenancyEnforcementTest {
                     if (method.getName().equals("closeUnfinishedShifts") && method.getOwner().getSimpleName().equals("ShiftRepository")) {
                         return;
                     }
-
-                    if (method.getOwner().getSimpleName().equals("BillingCycleRepository") &&
-                            (method.getName().equals("findActivesNative") || method.getName().equals("findTenantIdsWithExpiredActive"))) {
+if (method.getOwner().getSimpleName().equals("BillingCycleRepository") &&
+                            (method.getName().equals("findActivesNative") ||
+                             method.getName().equals("findTenantIdsWithExpiredActive") ||
+                             method.getName().equals("findActiveIds"))) {
                         return;
                     }
 

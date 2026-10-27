@@ -1,0 +1,33 @@
+name: B2BSystem
+services:
+  app:
+    profiles: [ "prod" ]
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_HOST=postgres-db
+    env_file: .env
+    container_name: b2b-system
+    build: .
+    ports:
+      - "${APP_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres-db
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

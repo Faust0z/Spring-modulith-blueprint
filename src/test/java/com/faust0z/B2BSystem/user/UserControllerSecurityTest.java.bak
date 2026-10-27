@@ -1,0 +1,125 @@
+package com.faust0z.B2BSystem.user;
+
+import com.faust0z.B2BSystem.core.PinAuthorizationSecurity;
+import com.faust0z.B2BSystem.core.RateLimiterService;
+import com.faust0z.B2BSystem.core.TenantContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.UUID;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.faust0z.B2BSystem.user.UserService;
+import com.faust0z.B2BSystem.user.UserController;
+@WebMvcTest(UserController.class)
+@Import(UserControllerSecurityTest.MethodSecurityConfig.class)
+class UserControllerSecurityTest {
+
+    @TestConfiguration
+    @EnableMethodSecurity
+    static class MethodSecurityConfig {
+    }
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
+    private UserService userService;
+
+    @MockitoBean
+    private RateLimiterService rateLimiterService;
+
+    @MockitoBean(name = "pinAuthorizationSecurity")
+    private PinAuthorizationSecurity pinAuthorizationSecurity;
+
+    private final String validUserPayload = """
+            {
+                "fullName": "Facundo Pérez",
+                "email": "facundo@localgym.com.ar",
+                "username": "user123",
+                "password": "SecurePass2026!",
+                "role": "TENANT_USER",
+                "dni": "11111111",
+                "defaultBranchId": "1c70cf24-cea0-41a9-a4e3-38628c075a43"
+            }
+            """;
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
+    @Test
+    void getUserById_UserIsAdmin_Returns200() throws Exception {
+        mockMvc.perform(get("/v1/users/" + UUID.randomUUID())
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getUserById_UserIsTenantAdmin_Returns403() throws Exception {
+        mockMvc.perform(get("/v1/users/" + UUID.randomUUID())
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_TENANT_ADMIN"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void createUser_UserIsAdmin_Returns201() throws Exception {
+        mockMvc.perform(post("/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validUserPayload)
+                        .with(jwt()
+                                .jwt(j -> j.claim("role", "ADMIN"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void createUser_UserIsTenantAdmin_Returns403() throws Exception {
+        mockMvc.perform(post("/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validUserPayload)
+                        .with(jwt()
+                                .jwt(j -> j.claim("role", "TENANT_ADMIN"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_TENANT_ADMIN"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getMyDetails_PinIsElevated_Returns200() throws Exception {
+        when(pinAuthorizationSecurity.isElevated()).thenReturn(true);
+
+        mockMvc.perform(get("/v1/users/me")
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getMyDetails_PinNotElevated_Returns403() throws Exception {
+        when(pinAuthorizationSecurity.isElevated()).thenReturn(false);
+
+        mockMvc.perform(get("/v1/users/me")
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getMyDetails_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/v1/users/me"))
+                .andExpect(status().isUnauthorized());
+    }
+}

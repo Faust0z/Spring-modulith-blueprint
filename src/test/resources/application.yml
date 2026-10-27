@@ -1,0 +1,15 @@
+spring:
+  flyway:
+    enabled: false
+  cache:
+    type: none
+
+app:
+  jwt:
+    secret: 9a4f4e35e719147d92631551812487da725fbda8e0c03459393049ad5524655f
+    expiration-ms: 86400000
+  cors:
+    allowed-origins: "http://localhost:8080,http://localhost:3000"
+  admin:
+    email: admin@test.com
+    password: testpassword

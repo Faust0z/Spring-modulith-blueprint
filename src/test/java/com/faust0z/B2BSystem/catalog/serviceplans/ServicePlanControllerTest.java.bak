@@ -1,0 +1,85 @@
+package com.faust0z.B2BSystem.catalog.serviceplans;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.faust0z.B2BSystem.catalog.ServicePlanResponse;
+import com.faust0z.B2BSystem.catalog.application.ServicePlanService;
+import com.faust0z.B2BSystem.catalog.web.ServicePlanController;
+import com.faust0z.B2BSystem.catalog.web.ServicePlanCreateRequest;
+import com.faust0z.B2BSystem.catalog.web.ServicePlanUpdateRequest;
+@ExtendWith(MockitoExtension.class)
+class ServicePlanControllerTest {
+
+    @Mock
+    private ServicePlanService servicePlanService;
+
+    @InjectMocks
+    private ServicePlanController servicePlanController;
+
+    @Test
+    void getAllServicePlans_ValidRequest_ReturnsListOfServicePlans() {
+        List<ServicePlanResponse> expectedList = List.of(createServicePlanResponse());
+        given(servicePlanService.getAllServicePlans()).willReturn(expectedList);
+
+        List<ServicePlanResponse> result = servicePlanController.getAllServicePlans();
+
+        assertThat(result).isEqualTo(expectedList);
+    }
+
+    @Test
+    void createServicePlan_ValidRequest_ReturnsCreatedServicePlan() {
+        ServicePlanCreateRequest request = new ServicePlanCreateRequest("Plan Mensual", 30, new BigDecimal("45000.00"));
+        ServicePlanResponse expectedResponse = createServicePlanResponse();
+        given(servicePlanService.createServicePlan(request)).willReturn(expectedResponse);
+
+        ServicePlanResponse result = servicePlanController.createServicePlan(request);
+
+        assertThat(result).isEqualTo(expectedResponse);
+    }
+
+    @Test
+    void updateServicePlan_ValidRequest_ReturnsUpdatedServicePlan() {
+        UUID servicePlanId = UUID.randomUUID();
+        ServicePlanUpdateRequest request = new ServicePlanUpdateRequest("Plan Anual", 365, new BigDecimal("400000.00"));
+        ServicePlanResponse expectedResponse = createServicePlanResponse();
+        given(servicePlanService.updateServicePlan(servicePlanId, request)).willReturn(expectedResponse);
+
+        ServicePlanResponse result = servicePlanController.updateServicePlan(servicePlanId, request);
+
+        assertThat(result).isEqualTo(expectedResponse);
+    }
+
+    @Test
+    void toggleServicePlanStatus_ValidId_ReturnsUpdatedServicePlan() {
+        UUID servicePlanId = UUID.randomUUID();
+        ServicePlanResponse expectedResponse = createServicePlanResponse();
+        given(servicePlanService.toggleServicePlanStatus(servicePlanId)).willReturn(expectedResponse);
+
+        ServicePlanResponse result = servicePlanController.toggleServicePlanStatus(servicePlanId);
+
+        assertThat(result).isEqualTo(expectedResponse);
+    }
+
+    private ServicePlanResponse createServicePlanResponse() {
+        return new ServicePlanResponse(
+                UUID.randomUUID(),
+                "Plan Mensual",
+                30,
+                new BigDecimal("45000.00"),
+                true
+        );
+    }
+}

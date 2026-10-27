@@ -1,0 +1,10 @@
+spring:
+  jpa:
+    show-sql: false
+
+# Uncomment these when you want to hide the API docs from the public in production
+# springdoc:
+#   api-docs:
+#     enabled: false
+#   swagger-ui:
+#     enabled: false

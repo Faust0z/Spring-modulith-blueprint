@@ -1,0 +1,30 @@
+package com.faust0z.B2BSystem.auth;
+
+import com.faust0z.B2BSystem.BaseIntegrationTest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+
+class LoginIntegrationTest extends BaseIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+//    @Test TODO: FIX
+//    void login_ValidAdminCredentials_ReturnsJwtAndUserDetails() {
+//        UserLoginRequest request = new UserLoginRequest("admin@test.com", "12345678");
+//
+//        ResponseEntity<UserAuthResult> response = restTemplate.postForEntity("/v1/auth/login", request, UserAuthResult.class);
+//
+//        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+//        assertThat(response.getBody()).isNotNull();
+//    }
+//
+//    @Test
+//    void login_InvalidPassword_Returns401Unauthorized() {
+//        UserLoginRequest request = new UserLoginRequest("admin@test.com", "wrongPassword");
+//
+//        ResponseEntity<String> response = restTemplate.postForEntity("/v1/auth/login", request, String.class);
+//
+//        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+//    }
+}

@@ -105,7 +105,8 @@ class CycleRollEngineTest {
             BillingCycleEntity cycle = createActiveCycleEntity(tenantId, 100);
 
             mockTransactionTemplate();
-            when(billingCycleRepository.findActivesNative(any(Instant.class))).thenReturn(List.of(cycle));
+            when(billingCycleRepository.findActiveIds(any(Instant.class))).thenReturn(List.of(cycle.getId()));
+            when(billingCycleRepository.findByIdForWrite(cycle.getId())).thenReturn(Optional.of(cycle));
             when(memberApi.countContactsWithAccess(any(Instant.class))).thenReturn(150);
 
             cycleRollEngine.recordNightlyPeaks();
@@ -120,7 +121,8 @@ class CycleRollEngineTest {
             BillingCycleEntity cycle = createActiveCycleEntity(tenantId, 100);
 
             mockTransactionTemplate();
-            when(billingCycleRepository.findActivesNative(any(Instant.class))).thenReturn(List.of(cycle));
+            when(billingCycleRepository.findActiveIds(any(Instant.class))).thenReturn(List.of(cycle.getId()));
+            when(billingCycleRepository.findByIdForWrite(cycle.getId())).thenReturn(Optional.of(cycle));
             when(memberApi.countContactsWithAccess(any(Instant.class))).thenReturn(50);
 
             cycleRollEngine.recordNightlyPeaks();

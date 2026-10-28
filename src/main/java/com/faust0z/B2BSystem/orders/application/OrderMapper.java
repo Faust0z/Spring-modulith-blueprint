@@ -14,7 +14,7 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.ReportingPolicy;
 
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
-public interface OrderMapper {
+interface OrderMapper {
 
     OrderResponse toResponse(OrderEntity orderEntity);
 

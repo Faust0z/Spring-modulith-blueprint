@@ -5,7 +5,7 @@
 ## Domain errors
 
 - All domain-thrown errors extend `com.faust0z.B2BSystem.core.DomainRuleException`. Exception carries its own HTTP status, title, message — no need to map elsewhere. See `core/DomainRuleException.java`.
-- Examples: `core/ResourceNotFoundException.java`, `core/EndDateBeforeStartException.java`, `core/PinRequiredException.java`, `gyms/DaysRangeTooWideException.java`, `gyms/IncorrectMinutesAmountException.java`, `identity/user/RoleEscalationException.java`.
+- Examples: `core/ResourceNotFoundException.java`, `core/EndDateBeforeStartException.java`, `core/PinRequiredException.java`, `staffing/web/DaysRangeTooWideException.java`, `staffing/web/IncorrectMinutesAmountException.java`, `user/RoleEscalationException.java`, `access/domain/DniNotFoundException.java`, `access/domain/AmbiguousIdentityException.java`.
 
 ## Global handler
 

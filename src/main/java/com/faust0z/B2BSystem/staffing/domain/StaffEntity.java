@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.TenantId;
 
 import java.util.UUID;
@@ -16,6 +17,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Entity
 @Table(name = "staff")
+@SQLRestriction("deleted_at IS NULL")
 public class StaffEntity extends TenantSoftDeletableEntity {
     @Column(name = "first_name", nullable = false)
     private String firstName;

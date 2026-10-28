@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.TenantId;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Entity
 @Table(name = "products")
+@SQLRestriction("deleted_at IS NULL")
 public class ProductEntity extends TenantSoftDeletableEntity {
 
     @Column(name = "name", nullable = false, length = 100)

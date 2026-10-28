@@ -16,7 +16,7 @@ import com.faust0z.B2BSystem.tenant.web.SubscriptionPlanCreateRequest;
 import com.faust0z.B2BSystem.tenant.web.SubscriptionPlanResponse;
 import com.faust0z.B2BSystem.tenant.web.SubscriptionPlanUpdateRequest;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
-public interface SubscriptionPlanMapper {
+interface SubscriptionPlanMapper {
     public SubscriptionPlanResponse toResponse(SubscriptionPlanEntity entity);
 
     public SubscriptionPlanEntity toEntity(SubscriptionPlanCreateRequest request);

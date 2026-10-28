@@ -32,7 +32,6 @@ build/
 
 ### VS Code ###
 .vscode/
-/AGENTS.md
 /k6-report.xml
 /summary.txt
 /build_output.txt

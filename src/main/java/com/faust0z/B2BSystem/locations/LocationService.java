@@ -112,7 +112,7 @@ public class LocationService implements LocationInternalApi {
     }
 
     @Override
-    @Cacheable(value = "branch_active_validation", key = "#locationId")
+    @Cacheable(value = "branch_active_validation", key = "T(com.faust0z.B2BSystem.core.TenantContext).getTenantId() + ':' + #locationId")
     @Transactional(readOnly = true)
     public UUID validateLocationActive(UUID locationId) {
         Location location = locationRepository.findById(locationId).orElseThrow(LocationNotFoundException::new);

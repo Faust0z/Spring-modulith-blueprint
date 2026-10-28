@@ -15,7 +15,7 @@ import com.faust0z.B2BSystem.user.User;
 import com.faust0z.B2BSystem.user.UserCreateRequest;
 import com.faust0z.B2BSystem.user.UserUpdateRequest;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
-public interface UserMapper {
+interface UserMapper {
 
     public UserResponse toResponse(User user);
 

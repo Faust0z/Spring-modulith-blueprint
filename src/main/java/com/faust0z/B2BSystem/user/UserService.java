@@ -5,6 +5,7 @@ import com.faust0z.B2BSystem.user.Role;
 import com.faust0z.B2BSystem.user.UserAuthInternalResponse;
 import com.faust0z.B2BSystem.user.UserInternalApi;
 import com.faust0z.B2BSystem.user.UserResponse;
+import com.faust0z.B2BSystem.user.infrastructure.AuthLookupRepository;
 import com.faust0z.B2BSystem.tenant.domain.TenantNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,7 @@ public class UserService implements UserInternalApi {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final CacheManager cacheManager;
+    private final AuthLookupRepository authLookupRepository;
 
     @Cacheable(value = "tenant_users", key = "#contextTenantId")
     public List<UserResponse> getAllUsers(UUID contextTenantId) {
@@ -58,7 +60,7 @@ public class UserService implements UserInternalApi {
         return userRepository.findAllByTenantId(contextTenantId, UserResponse.class);
     }
 
-    @Cacheable(value = "users", key = "#userId")
+    @Cacheable(value = "users", key = "#contextTenantId + ':' + #userId")
     @Transactional(readOnly = true)
     public UserResponse getUserById(UUID userId, UUID contextTenantId) {
         log.debug("Fetching user by id | userId={}", userId);
@@ -71,8 +73,8 @@ public class UserService implements UserInternalApi {
     public UserResponse createUser(UserCreateRequest request, UUID contextTenantId, Role requesterRole) {
         log.debug("Processing user registration");
 
-        if (userRepository.existsByEmail(request.email())) throw new EmailAlreadyInUseException();
-        if (request.username() != null && userRepository.existsByUsername(request.username())) throw new UsernameAlreadyInUseException();
+        if (authLookupRepository.existsByEmail(request.email())) throw new EmailAlreadyInUseException();
+        if (request.username() != null && authLookupRepository.existsByUsername(request.username())) throw new UsernameAlreadyInUseException();
         if (requesterRole != Role.ADMIN && request.role() == Role.ADMIN) throw new RoleEscalationException();
 
         User userEntity = userMapper.toEntity(request);
@@ -177,13 +179,13 @@ public class UserService implements UserInternalApi {
 
     @Override
     public UserResponse getUserResponseByIdentifier(String identifier) {
-        return userRepository.findByEmailIgnoreCaseOrUsernameIgnoreCase(identifier, identifier, UserResponse.class)
+        return authLookupRepository.findUserResponseByIdentifier(identifier)
                 .orElseThrow(UserNotFoundException::new);
     }
 
     @Override
     public UserAuthInternalResponse getUserAuthInternalByIdentifier(String identifier) {
-        UserAuthInternalResponse response = userRepository.findByEmailIgnoreCaseOrUsernameIgnoreCase(identifier, identifier, UserAuthInternalResponse.class)
+        UserAuthInternalResponse response = authLookupRepository.findUserAuthByIdentifier(identifier)
                 .orElseThrow(UserNotFoundException::new);
         if (!response.isActive()) throw new UserDisabledException();
         return response;
@@ -191,26 +193,26 @@ public class UserService implements UserInternalApi {
 
     @Override
     public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
+        return authLookupRepository.existsByEmail(email);
     }
 
     @Override
     public boolean existsByUsername(String username) {
-        return userRepository.existsByUsername(username);
+        return authLookupRepository.existsByUsername(username);
     }
 
     @Override
     @Transactional(readOnly = true)
     public UserResponse getUserResponseById(UUID userId) {
-        return userRepository.findById(userId, UserResponse.class).orElseThrow(UserNotFoundException::new);
+        return authLookupRepository.findUserResponseById(userId)
+                .orElseThrow(UserNotFoundException::new);
     }
 
     @Override
     @Transactional(readOnly = true)
     public UUID getTenantIdByUserId(UUID userId) {
-        UserResponse user = getUserResponseById(userId);
-        if (user.tenantId() == null) throw new TenantNotFoundException();
-        return user.tenantId();
+        return authLookupRepository.getTenantIdByUserId(userId)
+                .orElseThrow(() -> new TenantNotFoundException());
     }
 
     @Override

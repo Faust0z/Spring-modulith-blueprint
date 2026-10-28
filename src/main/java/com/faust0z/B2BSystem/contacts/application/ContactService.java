@@ -5,8 +5,11 @@ import com.faust0z.B2BSystem.core.TenantContext;
 import com.faust0z.B2BSystem.access.domain.ScanType;
 import com.faust0z.B2BSystem.contacts.ContactInternalApi;
 import com.faust0z.B2BSystem.contacts.domain.ContactAccessInternalResponse;
+import com.faust0z.B2BSystem.contacts.domain.ContactDetailsView;
 import com.faust0z.B2BSystem.contacts.domain.ContactEntity;
 import com.faust0z.B2BSystem.contacts.domain.ContactInternalStats;
+import com.faust0z.B2BSystem.contacts.domain.ContactSummary;
+import com.faust0z.B2BSystem.contacts.infrastructure.ContactDetailsRepository;
 import com.faust0z.B2BSystem.contacts.infrastructure.ContactDetailsViewRepository;
 import com.faust0z.B2BSystem.contacts.infrastructure.ContactRepository;
 import com.faust0z.B2BSystem.contacts.web.ContactCreateRequest;
@@ -27,6 +30,7 @@ import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -54,13 +58,14 @@ public class ContactService implements ContactInternalApi {
 
     private final ContactRepository contactRepository;
     private final ContactDetailsViewRepository contactViewRepository;
+    private final ContactDetailsRepository contactDetailsRepository;
     private final ContactMapper contactMapper;
 
     @Transactional(readOnly = true)
     public Page<ContactResponse> getAllContacts(Pageable pageable, ContactFilterRequest filters) {
         log.debug("Querying contacts | filters={}", filters);
 
-        List<Specification<com.faust0z.B2BSystem.contacts.domain.ContactDetailsView>> specs = new ArrayList<>();
+        List<Specification<ContactDetailsView>> specs = new ArrayList<>();
 
         if (filters.isActive() != null) {
             specs.add((root, query, cb) -> {
@@ -133,7 +138,18 @@ public class ContactService implements ContactInternalApi {
         }
 
         return contactViewRepository.findAll(Specification.allOf(specs), pageable)
-                .map(com.faust0z.B2BSystem.contacts.domain.ContactDetailsView::toResponse);
+                .map(ContactDetailsView::toResponse);
+    }
+
+    @Cacheable(value = "contacts", key = "T(com.faust0z.B2BSystem.core.TenantContext).getTenantId() + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
+    @Transactional(readOnly = true)
+    public Slice<ContactResponse> getAllContactsPaged(Pageable pageable) {
+        log.debug("Fetching contacts paged | pageable={}", pageable);
+
+        UUID tenantId = TenantContext.getTenantId();
+        Slice<ContactSummary> summarySlice = contactDetailsRepository.findAllByTenantId(tenantId, pageable);
+
+        return summarySlice.map(contactMapper::toDetails);
     }
 
     @Cacheable(value = "contact_quick_stats", key = "T(com.faust0z.B2BSystem.core.TenantContext).getTenantId()")
@@ -160,7 +176,7 @@ public class ContactService implements ContactInternalApi {
     public ContactResponse getContactById(UUID contactId) {
         log.debug("Fetching contact | contactId={}", contactId);
 
-        return contactViewRepository.findById(contactId, com.faust0z.B2BSystem.contacts.domain.ContactDetailsView.class)
+        return contactViewRepository.findById(contactId, ContactDetailsView.class)
                 .orElseThrow(ContactNotFoundException::new)
                 .toResponse();
     }
@@ -179,7 +195,7 @@ public class ContactService implements ContactInternalApi {
         contactEntity = contactRepository.save(contactEntity);
 
         log.info("Contact created | contactId={}", contactEntity.getId());
-        return contactViewRepository.findById(contactEntity.getId(), com.faust0z.B2BSystem.contacts.domain.ContactDetailsView.class)
+        return contactViewRepository.findById(contactEntity.getId(), ContactDetailsView.class)
                 .orElseThrow(ContactNotFoundException::new)
                 .toResponse();
     }
@@ -245,7 +261,7 @@ public class ContactService implements ContactInternalApi {
         contactRepository.save(contactEntity);
 
         log.debug("Successfully updated contact | contactId={}", contactId);
-        return contactViewRepository.findById(contactId, com.faust0z.B2BSystem.contacts.domain.ContactDetailsView.class)
+        return contactViewRepository.findById(contactId, ContactDetailsView.class)
                 .orElseThrow(ContactNotFoundException::new)
                 .toResponse();
     }
@@ -266,7 +282,7 @@ public class ContactService implements ContactInternalApi {
         contactRepository.save(contactEntity);
 
         log.debug("Contact status toggled | contactId={} | deletedAt={}", contactId, contactEntity.getDeletedAt());
-        return contactViewRepository.findById(contactId, com.faust0z.B2BSystem.contacts.domain.ContactDetailsView.class)
+        return contactViewRepository.findById(contactId, ContactDetailsView.class)
                 .orElseThrow(ContactNotFoundException::new)
                 .toResponse();
     }

@@ -12,9 +12,12 @@ import com.faust0z.B2BSystem.access.web.AccessLogCreateRequest;
 import com.faust0z.B2BSystem.access.web.AccessLogResponse;
 import com.faust0z.B2BSystem.access.web.AccessLogOccupancyResponse;
 import com.faust0z.B2BSystem.access.infrastructure.AccessLogRepository;
+import com.faust0z.B2BSystem.access.infrastructure.AccessLogRepository;
+import com.faust0z.B2BSystem.access.infrastructure.AccessLogDetailsRepository;
 import com.faust0z.B2BSystem.access.infrastructure.AccessLogDetailsViewRepository;
 import com.faust0z.B2BSystem.access.AccessLogInternalApi;
 import com.faust0z.B2BSystem.access.domain.AccessLogEntity;
+import com.faust0z.B2BSystem.access.domain.AccessLogSummary;
 import com.faust0z.B2BSystem.access.domain.AccessStatus;
 import com.faust0z.B2BSystem.access.domain.AccessStatsProjection;
 import com.faust0z.B2BSystem.access.domain.DailyCountProjection;
@@ -29,8 +32,10 @@ import com.faust0z.B2BSystem.access.domain.AccessLogNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,8 +61,10 @@ public class AccessLogService implements AccessLogInternalApi {
 
     private final AccessLogRepository accessLogRepository;
     private final AccessLogDetailsViewRepository accessLogViewRepository;
+    private final AccessLogDetailsRepository accessLogDetailsRepository;
     private final ContactInternalApi memberInternalApi;
     private final LocationInternalApi branchInternalApi;
+    private final AccessLogMapper accessLogMapper;
 
     @Transactional(readOnly = true)
     public Page<AccessLogResponse> getAllAccessLogs(Pageable pageable, AccessLogFilterRequest filters) {
@@ -99,6 +106,17 @@ public class AccessLogService implements AccessLogInternalApi {
         }
 
         return accessLogViewRepository.findAll(Specification.allOf(specs), pageable).map(AccessLogDetailsView::toResponse);
+    }
+
+    @Cacheable(value = "access_logs", key = "T(com.faust0z.B2BSystem.core.TenantContext).getTenantId() + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
+    @Transactional(readOnly = true)
+    public Slice<AccessLogResponse> getAllAccessLogsPaged(Pageable pageable) {
+        log.debug("Fetching access logs paged | pageable={}", pageable);
+
+        UUID tenantId = TenantContext.getTenantId();
+        Slice<AccessLogSummary> summarySlice = accessLogDetailsRepository.findAllByTenantId(tenantId, pageable);
+
+        return summarySlice.map(accessLogMapper::toDetails);
     }
 
     @Override

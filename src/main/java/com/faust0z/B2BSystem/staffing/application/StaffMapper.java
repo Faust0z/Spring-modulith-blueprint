@@ -12,7 +12,7 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.ReportingPolicy;
 
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
-public interface StaffMapper {
+interface StaffMapper {
     @Mapping(target = "deletedAt", source = "deletedAt")
     StaffResponse toResponse(StaffEntity entity);
 

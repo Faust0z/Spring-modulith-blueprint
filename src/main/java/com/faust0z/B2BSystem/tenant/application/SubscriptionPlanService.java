@@ -33,7 +33,7 @@ public class SubscriptionPlanService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final SubscriptionPlanMapper subscriptionPlanMapper;
 
-    @Cacheable(value = "subscription_plans")
+    @Cacheable(value = "subscription_plans", key = "T(com.faust0z.B2BSystem.core.TenantContext).getTenantId()")
     public List<SubscriptionPlanResponse> findAll() {
         log.debug("Querying subscription plans");
         return subscriptionPlanRepository.findBy(SubscriptionPlanResponse.class);

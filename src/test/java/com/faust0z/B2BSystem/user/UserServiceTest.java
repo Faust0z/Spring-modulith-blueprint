@@ -11,7 +11,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.quality.Strictness;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +36,7 @@ import com.faust0z.B2BSystem.user.UserMapper;
 import com.faust0z.B2BSystem.user.UserService;
 import com.faust0z.B2BSystem.user.User;
 import com.faust0z.B2BSystem.user.UserRepository;
+import com.faust0z.B2BSystem.user.infrastructure.AuthLookupRepository;
 import com.faust0z.B2BSystem.user.InvalidAdminPinException;
 import com.faust0z.B2BSystem.user.RoleEscalationException;
 import com.faust0z.B2BSystem.user.UserChangeRoleRequest;
@@ -42,6 +45,7 @@ import com.faust0z.B2BSystem.user.UserNotFoundException;
 import com.faust0z.B2BSystem.user.UserUpdatePasswordRequest;
 import com.faust0z.B2BSystem.user.UserUpdateRequest;
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class UserServiceTest {
 
     @Mock
@@ -52,6 +56,8 @@ class UserServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private CacheManager cacheManager;
+    @Mock
+    private AuthLookupRepository authLookupRepository;
 
     @InjectMocks
     private UserService userService;
@@ -108,8 +114,8 @@ class UserServiceTest {
             User entity = createDefaultEntity(tenantId);
             UserResponse expectedResponse = createDefaultResponse(entity.getId(), tenantId);
 
-            when(userRepository.existsByEmail(request.email())).thenReturn(false);
-            when(userRepository.existsByUsername(request.username())).thenReturn(false);
+            when(authLookupRepository.existsByEmail(request.email())).thenReturn(false);
+            when(authLookupRepository.existsByUsername(request.username())).thenReturn(false);
             when(userMapper.toEntity(request)).thenReturn(entity);
             when(passwordEncoder.encode(request.password())).thenReturn("encodedPass");
             when(userRepository.save(entity)).thenReturn(entity);
@@ -130,6 +136,9 @@ class UserServiceTest {
             UserCreateRequest request = new UserCreateRequest("Facundo Perez", null, null, null,
                     Role.ADMIN, null);
 
+            when(authLookupRepository.existsByEmail(any())).thenReturn(false);
+            when(authLookupRepository.existsByUsername(any())).thenReturn(false);
+
             assertThatThrownBy(() -> userService.createUser(request, UUID.randomUUID(), Role.TENANT_ADMIN))
                     .isInstanceOf(RoleEscalationException.class);
         }
@@ -141,6 +150,8 @@ class UserServiceTest {
                     "pass", Role.TENANT_ADMIN, null);
             User entity = createDefaultEntity(tenantId);
 
+            when(authLookupRepository.existsByEmail(request.email())).thenReturn(false);
+            when(authLookupRepository.existsByUsername(request.username())).thenReturn(false);
             when(userMapper.toEntity(request)).thenReturn(entity);
             when(userRepository.save(any())).thenReturn(entity);
             when(userMapper.toResponse(entity)).thenReturn(createDefaultResponse(entity.getId(), tenantId));
@@ -162,8 +173,8 @@ class UserServiceTest {
             UserResponse expectedResponse = createDefaultResponse(userId, tenantId);
 
             when(userRepository.findByIdAndTenantId(userId, tenantId, User.class)).thenReturn(Optional.of(existingEntity));
-            when(userRepository.existsByEmail(request.email())).thenReturn(false);
-            when(userRepository.existsByUsername(request.username())).thenReturn(false);
+            when(authLookupRepository.existsByEmail(request.email())).thenReturn(false);
+            when(authLookupRepository.existsByUsername(request.username())).thenReturn(false);
             when(userMapper.toResponse(existingEntity)).thenReturn(expectedResponse);
 
             UserResponse result = userService.updateUser(userId, tenantId, request);

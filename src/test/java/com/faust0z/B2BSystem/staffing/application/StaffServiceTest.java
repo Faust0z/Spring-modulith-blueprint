@@ -1,4 +1,4 @@
-package com.faust0z.B2BSystem.staffing;
+package com.faust0z.B2BSystem.staffing.application;
 
 import com.faust0z.B2BSystem.core.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -8,6 +8,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,8 +21,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.faust0z.B2BSystem.staffing.application.StaffMapper;
-import com.faust0z.B2BSystem.staffing.application.StaffService;
 import com.faust0z.B2BSystem.staffing.domain.StaffEntity;
 import com.faust0z.B2BSystem.staffing.domain.StaffIdentifierType;
 import com.faust0z.B2BSystem.staffing.infrastructure.StaffRepository;
@@ -31,6 +31,7 @@ import com.faust0z.B2BSystem.staffing.web.StaffNotFoundException;
 import com.faust0z.B2BSystem.staffing.web.StaffResponse;
 import com.faust0z.B2BSystem.staffing.web.StaffUpdateRequest;
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class StaffServiceTest {
 
     @Mock

@@ -1,164 +1,212 @@
-# Catalog Inventory Blueprint
+# Spring Modulith Production Blueprint
 
-Multi-tenant REST API for managing catalog and access operations across local businesses (gyms, treatment centers, clubs). Enforces strict tenant isolation via `TenantContext` and Hibernate `@TenantId` filtering. Built with Spring Modulith to enforce architectural boundaries between domain modules.
+> A production-grade, multi-tenant B2B SaaS backend blueprint built with **Spring Boot 4.1.1**, **Spring Modulith 2.1.1**, and **Java 25**. Designed as a reference architecture demonstrating enterprise patterns for modular monoliths with strict tenant isolation, memory-constrained runtime optimization, and comprehensive structural enforcement via tests.
 
-## Key Architecture Points
+---
 
-- Modulith: strict boundaries between modules with `*InternalApi` interfaces at each module root for cross-module communication
-- Multi-tenancy: data isolation by `tenant_id` via Hibernate filter and ThreadLocal `TenantContext`
-- Stateless authentication: JWT with Spring Security OAuth2 Resource Server
-- RBAC authorization: roles `ADMIN`, `TENANT_ADMIN`, `TENANT_USER`
-- Local cache: Caffeine with differentiated TTLs and tenant-scoped keys
-- SQL projections: `@Immutable` JPA entities mapped from database views for complex reads
-- Concurrency: optimistic locking with `@Version`, virtual threads enabled
-- Standardized errors: `ProblemDetail` (RFC 9457) with traceId and timestamp
-- Audit: `created_by`, `last_modified_by`, `created_at`, `last_modified_at` on mutable entities
+## What This Is
+
+This repository is a **blueprint**, not a product. It exists to demonstrate how to build a maintainable, testable, and scalable B2B SaaS backend using modern Spring ecosystem patterns. Every architectural decision is intentional and enforced by automated tests — not documentation alone.
+
+The codebase models a generic **catalog & access management** domain (contacts, products, service plans, locations, staffing, orders, billing) across **14 modules** with strict boundaries. It is designed to be cloned, studied, and adapted.
+
+---
+
+## Architecture Highlights
+
+### Modular Monolith (Spring Modulith)
+
+14 domain modules with compile-time boundary enforcement via `ApplicationModules.of(...)`. Cross-module communication goes exclusively through `*InternalApi` interfaces placed at module roots. No service or repository is ever injected across module boundaries.
+
+```
+com.faust0z.B2BSystem
+├── access/        Entry logs, scan processing, occupancy
+├── auth/          Security, JWT, OAuth2, tenant context filter
+├── catalog/       Products, service plans, catalog templates
+├── contacts/      Contact/member CRUD, import, quick stats
+├── core/          Tenancy, caching, errors, base entities, scheduling
+├── dashboard/     Dashboard aggregation
+├── locations/     Branch/location CRUD, active validation
+├── notifications/ Event listeners (email verification)
+├── orders/        Orders, order items, invoices
+├── publics/       Public/unauthenticated controllers
+├── registration/  Tenant registration, email verification
+├── staffing/      Staff, shifts, shift sweeper job
+├── tenant/        Tenants, billing cycles, subscription plans
+└── user/          Users, auth internal API
+```
+
+The `tenant/` module is the only one using the **layered package layout** (`domain/`, `application/`, `infrastructure/`, `web/`). All other modules are flat — a deliberate, documented choice for incremental adoption.
+
+### Multi-Tenancy (Hibernate `@TenantId`)
+
+Tenant isolation is enforced at the ORM level via `@TenantId` on entity fields and a `CurrentTenantIdentifierResolver` backed by a `ThreadLocal` `TenantContext`. No query can accidentally cross tenant boundaries — Hibernate filters every read automatically.
+
+- **System scope**: Cross-tenant operations (scheduled jobs, sweeps) use `TenantContext.SYSTEM_SCOPE` explicitly — an intentional escape hatch, never a fallback.
+- **Pre-context reads**: Identity lookups before tenant is known (login, registration) go through `AuthLookupRepository` (JDBC, no Hibernate session), structurally guaranteeing zero tenant-resolver involvement.
+- **Per-tenant reload**: Cross-tenant aggregations fetch scalar IDs only, then reload managed entities inside per-tenant loops via `TenantJobRunner.forEach()`.
+
+### Entity Base Class Hierarchy
+
+Five base classes, each chosen by entity lifecycle:
+
+```
+ImmutableBaseEntity  (id, createdAt, createdBy, @Version) — append-only ledgers
+├── TenantMutableEntity       (+ tenantId, lastModifiedAt/By, isNew) — CRUD
+│   └── TenantSoftDeletableEntity  (+ deletedAt, softDelete(), @SQLRestriction) — soft-delete
+│       └── TenantTogglableEntity  (+ isActive) — legacy toggles
+└── SystemMutableEntity       (no tenantId; hybrid tables like users)
+```
+
+### Two-Stage Reads (Memory Optimization)
+
+Heavy tables (`contacts`, `access_logs`) use a two-stage JDBC pattern:
+
+1. `RowMapper<[Domain]Summary>` — pure column extraction into a package-private `Summary` record
+2. `[Domain]Mapper.toDetails(Summary)` — MapStruct computes derived values (`fullName`, `canAccess`, etc.)
+
+Returns `Slice` (no `COUNT(*)` roundtrip). View entities (`@Immutable`) are join-layer only — JPA never hydrates them for list endpoints.
+
+### Caching (Caffeine)
+
+- Per-cache TTLs and max sizes defined in `CacheConfig`
+- **Tenant-scoped keys mandatory**: every `@Cacheable` key includes tenant (`tenantId + ':' + id`)
+- `@Caching` groups evictions/puts on mutations
+- `CacheErrorHandler` logs failures instead of throwing
+- Programmatic `CacheManager` reserved for revocation records
+
+### Error Handling (RFC 9457)
+
+All domain errors extend `DomainRuleException` (carries own HTTP status, title, message). `GlobalExceptionHandler` maps everything to `ProblemDetail` with `traceId` (from MDC) and `timestamp`. No `ResponseStatusException` in services.
+
+### Cross-Module Communication
+
+- `*InternalApi` interfaces at module roots — the only allowed cross-module call path
+- Pass **ids, not entities** across boundaries; receiving module hydrates through its own repository
+- Atomic multi-step flows orchestrated synchronously in same transaction (not events)
+- Application events reserved for genuinely async side effects (email dispatch)
+
+---
 
 ## Technical Stack
 
 | Component | Technology |
-|------------|------------|
-| Language | Java 21 |
-| Framework | Spring Boot 3.5.7, Spring Modulith 1.3.0 |
-| Server | Undertow |
-| Persistence | PostgreSQL, Spring Data JPA / Hibernate 6 |
-| Migrations | Flyway |
+|-----------|------------|
+| Language | Java 25 |
+| Framework | Spring Boot 4.1.1, Spring Modulith 2.1.1 |
+| Server | Tomcat 11 (Servlet 6.1) |
+| Persistence | PostgreSQL, Spring Data JPA / Hibernate 7 |
+| Migrations | Flyway (V1–V5) |
 | Cache | Caffeine |
-| DTO Mapping | MapStruct 1.5.5.Final |
-| Validation | Jakarta Validation + Hibernate Validator |
+| DTO Mapping | MapStruct 1.6.3 |
+| Validation | Jakarta Validation |
 | Security | Spring Security, OAuth2 Resource Server (JWT) |
-| Documentation | SpringDoc OpenAPI 2.8.15 |
-| Testing | JUnit 5, Testcontainers, ArchUnit |
+| Documentation | SpringDoc OpenAPI 3.1.1 |
+| Testing | JUnit 5, Testcontainers, ArchUnit 1.5.1 |
 | Metrics | Micrometer + Prometheus |
-| Logs | Logstash Logback Encoder |
+| Logs | Logstash Logback Encoder 8.1 |
 
-## Configuration and Deployment (Quick Start)
+---
+
+## Structural Enforcement (Tests as Architecture)
+
+The codebase has **no** flat ArchUnit "layer violation" rule. Instead, three mechanisms enforce invariants:
+
+| Mechanism | What it enforces |
+|-----------|------------------|
+| **`TenancyEnforcementTest`** (ArchUnit) | Every `@Entity` has `@TenantId` (allowlisted system entities excepted); every native `@Query` contains `tenant_id = :tenantId` (allowlisted cross-tenant queries); `UserRepository` reads are tenant-scoped |
+| **`SoftDeleteRestrictionTest`** (ArchUnit) | Every `@Entity` subclass of `TenantSoftDeletableEntity` carries `@SQLRestriction("deleted_at IS NULL")` |
+| **`B2BSystemArchitectureTest`** (Spring Modulith) | Module boundary and dependency violations fail at `ApplicationModules.of(...)` construction |
+
+Additionally: `AbstractJpaSliceTest` provides a reusable JPA slice test base with Testcontainers Postgres, and dedicated cache tests verify tenant-scoped key isolation.
+
+---
+
+## Read Patterns (Sanctioned)
+
+All read endpoints follow one of these patterns — no ad-hoc queries:
+
+1. **Projection with `findBy`** (primary): Spring Data fluent API with type-safe projections (`findById(id, Response.class)`, `findAllBy(Response.class)`)
+2. **Filtered/Pageable**: `Specification.allOf(specs)` + fluent `findBy(spec, q -> q.as(Summary.class).page(pageable))`
+3. **Heavy-table two-stage**: JdbcTemplate `RowMapper<Summary>` → `Slice` → `Slice.map(mapper::toDetails)` (contacts, access_logs)
+4. **Cross-tenant**: scalar ID fetch → per-tenant reload after `TenantContext.setTenantId()`
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-- JDK 21
-- PostgreSQL 15+
-- Maven 3.9+ (or use the included wrapper)
+- JDK 21+
+- PostgreSQL 15+ (or use Testcontainers)
+- Maven 3.9+ (wrapper included)
+
+### Run
+
+```bash
+# Start Postgres (or use docker-compose)
+docker compose up -d
+
+# Run the application
+./mvnw spring-boot:run
+
+# Run tests (requires Docker)
+./mvnw test
+```
 
 ### Environment variables
 
-```bash
-DATABASE_URL=jdbc:postgresql://localhost:5432/catalog_inventory
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-JWT_SECRET=<replace_with_256_bit_secret>
-JWT_EXPIRATION=3600000
-ACTUATOR_USERNAME=admin
-ACTUATOR_PASSWORD=<replace_with_password>
-ADMIN_EMAIL=admin@test.com
-ADMIN_PASSWORD=<replace_with_password>
-CORS_ALLOWED_ORIGINS=http://localhost:3000
-RESEND_API_KEY=re_xxx
-RESEND_FROM_EMAIL=noreply@example.com
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/catalog_inventory` | JDBC URL |
+| `POSTGRES_USER` | `postgres` | DB user |
+| `POSTGRES_PASSWORD` | `postgres` | DB password |
+| `JWT_SECRET` | (required) | 256-bit JWT signing secret |
+| `JWT_EXPIRATION` | `86400000` | Token TTL (ms) |
+| `APP_FRONTEND_URL` | `http://localhost:3000` | CORS origin |
+| `RESEND_API_KEY` | (optional) | Email service key |
+| `RESEND_FROM_EMAIL` | `onboarding@resend.dev` | Sender address |
 
-### Local startup
+---
 
-```bash
-# Compile
-./mvnw.cmd compile -q
+## Database Schema
 
-# Run
-./mvnw.cmd spring-boot:run
-```
+Schema state as of **V5** (5 Flyway migrations). Key conventions:
 
-Endpoints:
-- API: `http://localhost:8080`
-- Actuator: `/actuator/health`, `/actuator/prometheus`
-- OpenAPI: `/swagger-ui.html`
+- **UUID primary keys** (application-generated, no `gen_random_uuid()`)
+- **Tenant isolation**: `tenant_id UUID NOT NULL` + index on every tenant-scoped table
+- **Soft delete**: `deleted_at TIMESTAMPTZ` (nullable; NULL = active) with partial unique indexes
+- **Optimistic locking**: `version INTEGER NOT NULL DEFAULT 0` on all tables
+- **Audit columns**: `created_at`, `created_by`, `last_modified_at`, `last_modified_by`
+- **Timestamps**: `TIMESTAMPTZ` (timezone-aware)
+- **Money**: `NUMERIC(12,2)` with `_ars` suffix
 
-Flyway applies migrations automatically on startup (`baseline-on-migrate: true`).
+---
 
-## Modules
+## Testing Strategy
 
-The Modulith architecture organizes code into domain modules. Two structural patterns:
+- **No in-memory DB** — all repository tests run against real Postgres via Testcontainers
+- **No `@MockBean`** — standardized on `@MockitoBean` (Spring Boot 4.1)
+- **No test ordering** — random method order, isolated by construction
+- **No `Instant.now()` in domain** — thread `Instant` for deterministic tests
+- **Cache tests** bring up own Caffeine context with tenant-scoped key assertions
+- **Architecture tests** fail the build on boundary violations
 
-**Layered modules** (multi-entity, complex logic):
+---
 
-```
-catalog/
-├── domain/          # Entities, enums, exceptions
-├── infrastructure/  # JPA repositories
-├── application/     # Services, mappers
-└── web/             # Controllers, request DTOs
-```
+## Design Principles
 
-**Flat modules** (simple entity or infrastructure):
+1. **Multi-tenancy is non-negotiable** — `@TenantId` + `TenantIdentifierResolver`, never query across tenants without explicit system scope
+2. **Entities are never exposed** — services return DTOs/projection records only
+3. **Reads are intentional** — every read path follows a sanctioned pattern; no `findAll()` on collections
+4. **Mutations are atomic** — cross-module writes in same transaction via `*InternalApi`, not events
+5. **Cache keys include tenant** — one tenant never reads another's cached data
+6. **Soft delete over hard delete** — `deleted_at` + `@SQLRestriction`, never `DELETE` on tenant data
+7. **Migrations are versioned** — V-numbered, append-only, never edit applied migrations
+8. **Tests enforce architecture** — invariants are code, not comments
 
-```
-auth/
-dashboard/
-locations/
-publics/
-registration/
-user/
-notifications/
-```
+---
 
-Each module exposes its public surface via `*InternalApi` interfaces at the module root.
+## License
 
-## Domain Logic and Security
-
-### Tenant isolation
-
-Every mutable entity includes `tenant_id`. The Hibernate filter injects the value automatically. `TenantContext` is set per request via `TenantContextFilter`.
-
-### Permission model
-
-| Role | Scope |
-|-----|---------|
-| `ADMIN` | Full access across all tenants |
-| `TENANT_ADMIN` | Administration of own tenant |
-| `TENANT_USER` | Basic operations within own tenant |
-
-Composite security annotations:
-- `@RequireAdmin`: `hasRole('ADMIN')`
-- `@RequirePinAuthorization`: admin PIN elevation for sensitive actions
-
-### Critical business rules
-
-- **Contacts**: DNI unique per tenant. Access valid if `is_active = true` and `access_until > now()`.
-- **Locations**: name unique per tenant. Soft delete via `is_active`.
-- **Catalog**: products and service plans are created per tenant and assigned to catalog templates. Templates define available items for sale.
-- **Orders**: linked to a location and a contact. Items can be products or service plans.
-- **Access logs**: registered by DNI scan or token. `ScanType` defines the identification mode.
-- **Staff**: attendance records per tenant.
-
-### Registration flow
-
-1. `RegistrationService.register()` creates the tenant, default location, default service plan, and initial admin user.
-2. Verification email is sent via `EmailVerificationTokenService`.
-3. Tenant becomes active for login once verified.
-
-### Cache
-
-| Cache | TTL |
-|-------|-----|
-| `dashboard` | 5 min |
-| `user_dnis` | 12 h |
-| `revocations` | 24 h |
-| Default | 30 min |
-
-Keys always include `tenant_id` for isolation. Eviction on write via `@CacheEvict` and `@Caching`.
-
-### Error handling
-
-`GlobalExceptionHandler` centralizes exception mapping to `ProblemDetail` (RFC 9457) with traceId, timestamp, and Spanish messages. Domain exceptions extend `DomainRuleException` carrying HTTP `title`, `status`, and user-facing detail.
-
-## Architecture Decisions and Limitations (Trade-offs)
-
-- **Virtual threads**: enabled by default. Undertow configured with 1 IO thread. Suitable for I/O-bound workloads (DB, HTTP). Not tuned for CPU-intensive operations.
-- **HikariCP**: pool of 2 to 5 connections. Adequate for small deployments. Requires retuning for high volume.
-- **Local cache (Caffeine)**: not distributed. In multi-replica deployments, each instance caches independently. No cross-node invalidation.
-- **Single database**: shared PostgreSQL schema with `tenant_id` as isolation key. No schema-per-tenant or sharding.
-- **Flyway baseline**: `baseline-on-migrate: true` assumes historical migrations have already been applied in existing environments.
-- **Modulith verification**: `modules.verify()` detects cycles between modules (e.g. `access` <-> `contacts` via `ScanType`). The project uses Modulith documentation generation as the verification baseline.
-- **Technical debt**:
-  - The `access` module couples `contacts` domain types (`ScanType`, `ContactAccessInternalResponse`) in its internal API.
-  - `InvoiceInternalApi` in `orders` is empty (placeholder for future billing integration).
-  - Domain messages and logs are in Spanish. Standardizing to English would ease integration with international tooling.
+This project is a reference architecture blueprint. Use it as a starting point for your own multi-tenant SaaS backend.
